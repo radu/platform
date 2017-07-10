@@ -1,0 +1,4 @@
+<%= link("Create New Player", to: player_path(@conn, :new), class: "btn btn-success") %>
+<br\>
+<%= link("List all players", to: player_path(@conn, :index), class: "btn btn-info") %>
+
