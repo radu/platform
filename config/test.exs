@@ -12,8 +12,8 @@ config :logger, level: :warn
 # Configure your database
 config :platform, Platform.Repo,
   adapter: Ecto.Adapters.Postgres,
-  username: "ecto",
-  password: "none",
+  username: "postgres",
+  password: "",
   database: "platform_test",
   hostname: "localhost",
   pool: Ecto.Adapters.SQL.Sandbox
