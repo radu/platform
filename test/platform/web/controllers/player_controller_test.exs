@@ -19,7 +19,7 @@ defmodule Platform.Web.PlayerControllerTest do
 
   test "renders form for new players", %{conn: conn} do
     conn = get conn, player_path(conn, :new)
-    assert html_response(conn, 200) =~ "New Player"
+    assert html_response(conn, 200) =~ "Player Sign Up"
   end
 
   test "creates player and redirects to show when data is valid", %{conn: conn} do
@@ -34,7 +34,7 @@ defmodule Platform.Web.PlayerControllerTest do
 
   test "does not create player and renders errors when data is invalid", %{conn: conn} do
     conn = post conn, player_path(conn, :create), player: @invalid_attrs
-    assert html_response(conn, 200) =~ "New Player"
+    assert html_response(conn, 200) =~ "Player Sign Up"
   end
 
   test "renders form for editing chosen player", %{conn: conn} do

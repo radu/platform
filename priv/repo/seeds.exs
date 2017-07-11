@@ -9,3 +9,6 @@
 #
 # We recommend using the bang functions (`insert!`, `update!`
 # and so on) as they will fail if something goes wrong.
+
+Platform.Repo.insert! (%Platform.Accounts.Player{display_name: "Bob Marley", username: "bob", score: 10000})
+Platform.Repo.insert! (%Platform.Accounts.Player{display_name: "Manu Chao", username: "manu", score: 300})
