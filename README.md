@@ -1,15 +1,8 @@
 [![Build Status](https://travis-ci.org/radu/platform.svg?branch=master)](https://travis-ci.org/radu/platform)
 
-# Platform
+Implementation of a simple game server using Phoenix / Elm stack, per ['Elixir and Elm Tutorial'](https://leanpub.com/elixir-elm-tutorial/)
 
-To start your Phoenix server:
-
-  * Install dependencies with `mix deps.get`
-  * Create and migrate your database with `mix ecto.create && mix ecto.migrate`
-  * Install Node.js dependencies with `cd assets && npm install`
-  * Start Phoenix endpoint with `mix phx.server`
-
-Now you can visit [`localhost:4000`](http://localhost:4000) from your browser.
+## Deploy
 
 Ready to run in production? Please [check our deployment guides](http://www.phoenixframework.org/docs/deployment).
 
