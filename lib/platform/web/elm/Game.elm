@@ -2,11 +2,14 @@ module Game exposing (..)
 
 import AnimationFrame exposing (diffs)
 import Html exposing (Html, div)
-import Keyboard exposing (KeyCode, downs)
+import Keyboard exposing (KeyCode, downs, ups)
 import Random
 import Svg exposing (..)
 import Svg.Attributes exposing (..)
 import Time exposing (Time, every, second)
+import Phoenix.Channel
+import Phoenix.Push
+import Phoenix.Socket
 
 -- MAIN
 
@@ -34,54 +37,82 @@ type alias Size =
     , h: Int
     }
 
-type alias ItemProp = Item ItemAttr
 
 type alias Model =
     { gameState : GameState
-    , character : ItemProp
-    , items : List ItemProp
+    , character : Character
+    , items : List Item
     , score : Int
+    , phxSocket: Phoenix.Socket.Socket Msg
     , itemsCollected : Int
     , timeRemaining : Int
     }
 
-type  ImageType = SVG | IMG
+type ImageType = SVG | IMG
 
-type alias Item x =
-    { image : String
-    , imgType : ImageType
-    , attr : x
+type alias Image  =
+    { url : String
+    , imgType  : ImageType
     }
 
-type alias ItemAttr =
-    { pos  : Position
-    , size : Size
+type alias ImageSingle a = 
+    { a | img: Image
     }
+
+type alias ImageLR a =
+    { a | imgleft : Image
+        , imgright: Image
+        , facing  : FacingDirection 
+    }
+
+type alias PositionSize a =
+    { a | pos  : Position
+        , size : Size
+    }
+
+type alias Velocity a = 
+    { a | velocity : Float
+    }
+
+type alias CharacterAttr =
+    {  }
+
+type alias ItemAttr = 
+    {  }
+
+type alias Item = PositionSize ( ImageSingle ItemAttr )
+type alias Character = PositionSize ( ImageLR ( Velocity CharacterAttr ))
+
 
 initialModel : Model
 
 initialModel =
     { gameState = StartScreen
     , character = 
-        { image = "/images/character.gif" 
-        , imgType = IMG
-        , attr = 
-            { pos =
-                { x = 50
-                , y = 300
-                }
-            , size =
-                { w = 50
-                , h = 50
-                }
+        { imgleft = 
+            { url = "/images/character-l.gif"
+            , imgType = IMG }
+        , imgright =
+            { url = "/images/character-r.gif"
+            , imgType = IMG }
+        , facing = FaceRight
+        , pos =
+            { x = 50
+            , y = 300
             }
+        , size =
+            { w = 50
+            , h = 50
+            }
+        , velocity = 0
         }
         , items =
             [
-                { image = "/images/coin.svg"
-                , imgType = SVG
-                , attr = 
-                    { pos = 
+                {
+                    img =
+                        { url = "/images/coin.svg"
+                        , imgType = SVG }
+                    , pos = 
                           { x  = 500
                           , y = 300
                           }
@@ -89,13 +120,17 @@ initialModel =
                         { w = 20
                         , h = 20
                         }
-                    }
                 }
             ]
         , score = 0
         , itemsCollected = 0
         , timeRemaining = 10
+        , phxSocket = initPhxSocket
     }
+
+initPhxSocket : Phoenix.Socket.Socket Msg
+initPhxSocket = Phoenix.Socket.init "ws://localhost:4000/socket/websocket"
+                    |> Phoenix.Socket.withDebug
 
 
 init : ( Model, Cmd Msg )
@@ -105,23 +140,40 @@ init =
 
 -- UPDATE
 
-type Msg 
+type Msg
     = KeyDown KeyCode
+    | KeyUp KeyCode
     | TimeUpdate Time
     | CountdownTimer Time
+    | PhoenixMsg  (Phoenix.Socket.Msg Msg)
+    | MoveCharacter Time
     | MoveItems Int
+    | ChangeDirection Time
     | NoOp
 
 type Direction
-    = Up 
+    = Up
     | Down
     | Left
     | Right
     | Abs
 
-
+type FacingDirection
+    = FaceLeft
+    | FaceRight
 
 itemsRequired = 10
+
+setCharacterVel v m =
+    { m | character = changeVel v m.character }
+
+timeUpdatePos : PositionSize (Velocity x) -> Float -> PositionSize (Velocity x)
+timeUpdatePos p time =
+    let 
+        v = p.velocity
+        dx = round (v * time)
+    in
+      changePos Right dx p
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
@@ -138,14 +190,23 @@ update msg model =
      case model.gameState of
        Playing ->
           case msg of
+            KeyUp 37 ->
+                ( ( model |> setCharacterVel 0)
+                   , Cmd.none )
+
+            KeyUp 39 ->
+                ( ( model |> setCharacterVel 0)
+                   , Cmd.none )
+
 
             KeyDown 37 ->
-                ( { model | character = changeItem (changePos Left 10) model.character }, 
-                Cmd.none )
+                ( ( model |> setCharacterVel -0.25)
+                   , Cmd.none )
 
             KeyDown 39 ->
-                ( { model | character = changeItem (changePos Right 10) model.character }, 
-                Cmd.none )
+                ( ( model |> setCharacterVel 0.25)
+                   , Cmd.none )
+
 
             TimeUpdate time ->
                 if List.any ( characterFoundItem model) model.items then
@@ -163,14 +224,37 @@ update msg model =
                     ( model, Cmd.none )
 
             MoveItems amt ->
-                ( { model | items = List.map ( changeItem (changePos Abs amt)) model.items  } ,
+                ( { model | items = List.map ( changePos Abs amt ) model.items  } ,
                   Cmd.none )
 
             CountdownTimer time ->
                 ( { model | timeRemaining = model.timeRemaining - 1 }, Cmd.none )
 
+            PhoenixMsg msg ->
+                let 
+                    ( phxSocket, phxCmd ) = Phoenix.Socket.update msg model.phxSocket
+                in
+                    ( { model | phxSocket = phxSocket } , Cmd.map PhoenixMsg phxCmd  )
+
+
+            MoveCharacter time ->
+                ( { model | character = timeUpdatePos model.character time } 
+                , Cmd.none )
+
+            ChangeDirection time ->
+                let 
+                    m = if model.character.velocity > 0 then
+                            { model | character = changeDirection FaceRight model.character }
+                        else if model.character.velocity < 0 then
+                            { model | character = changeDirection FaceLeft model.character }
+                        else
+                            model
+                in
+                    ( m, Cmd.none )
+
             _ ->
                 ( model, Cmd.none )
+
 
        _ -> 
         case msg of
@@ -180,38 +264,38 @@ update msg model =
             _ ->
                 ( model, Cmd.none )
 
-changeItem : ( ItemAttr -> ItemAttr ) -> ItemProp -> ItemProp
-changeItem fun item =
-    { item | attr = fun item.attr }
+changeDirection dir it =
+    { it | facing = dir }
 
-changePos : Direction -> Int -> ItemAttr -> ItemAttr
-changePos dir amt attr =
+changeVel vel it =
+    { it | velocity = vel }
+
+changePos dir amt it  =
     let 
-        p = attr.pos
-
-    in
-        case dir of
+        oldpos = it.pos
+        newpos = case dir of
             Left ->
-                { attr | pos = { p | x = p.x - amt }}
+                { oldpos | x = oldpos.x - amt }
             Right ->
-                { attr | pos = { p | x = p.x + amt }}
+                { oldpos | x = oldpos.x + amt }
             Abs ->
-                { attr | pos = { p | x = amt }}
+                { oldpos | x = amt }
             _ ->
-                attr
-
-positionsClose : Int -> ItemProp -> ItemProp -> Bool
-positionsClose bound a b =
-    let
-        pos = a.attr.pos
-        xrange = List.range (pos.x + 20 - bound ) (pos.x + 20)
-        yrange = List.range (pos.y - bound ) (pos.y + bound)
-
+                oldpos
     in
-        List.member b.attr.pos.x xrange &&
-        List.member b.attr.pos.y yrange
+        { it | pos = newpos }
 
-characterFoundItem : Model -> ItemProp -> Bool
+positionsClose : Int -> Character -> Item -> Bool
+positionsClose bound chr it =
+    let
+        pos = chr.pos
+        (xRangeLo , xRangeHi) = (pos.x + 20 - bound , pos.x + 20)
+        (yRangeLo , yRangeHi) = (pos.y - bound , pos.y + bound)
+    in
+        (it.pos.x >= xRangeLo) && (it.pos.x <= xRangeHi) &&
+        (it.pos.y >= yRangeLo) && (it.pos.y <= yRangeHi)
+
+characterFoundItem : Model -> Item -> Bool
 characterFoundItem model item =
     let
       bound = 10
@@ -223,10 +307,14 @@ characterFoundItem model item =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    Sub.batch 
-    [ downs KeyDown 
+    Sub.batch
+    [ downs KeyDown
+    , ups KeyUp
+    , diffs MoveCharacter
+    , diffs ChangeDirection
     , diffs TimeUpdate
     , every second CountdownTimer
+    , Phoenix.Socket.listen model.phxSocket PhoenixMsg
     ]
 
 
@@ -244,7 +332,7 @@ viewGameState model =
             [ viewGameWindow
             , viewGameSky
             , viewGameGround
-            , viewCharacter model
+            , viewCharacter model.character
             ] ++
             ( viewItems model )
   in
@@ -309,13 +397,28 @@ viewGameGround =
          ]
          []
 
-viewCharacter : Model -> Svg Msg
-viewCharacter model =
-    viewItem model.character
 
-showItemImage : String -> Position -> Size -> Svg Msg
-showItemImage loc pos size =
-    image [ xlinkHref loc
+facingImage : ImageLR c -> Image
+facingImage it =
+    case it.facing of
+        FaceLeft -> it.imgleft
+        FaceRight -> it.imgright
+
+viewCharacter : Character -> Svg Msg
+viewCharacter chr =
+    let 
+        img = facingImage chr
+    in
+        showItemImage img chr.pos chr.size
+
+
+viewItem : Item -> Svg Msg
+viewItem it = 
+    showItemImage it.img it.pos it.size
+
+showItemImage : Image -> Position -> Size -> Svg Msg
+showItemImage img pos size =
+    image [ xlinkHref img.url
           , x ( toString pos.x )
           , y ( toString pos.y )
           , width ( toString size.w )
@@ -328,18 +431,13 @@ viewItems model =
     List.map (maybeViewItem model) model.items
 
 
-maybeViewItem : Model -> ItemProp -> Svg Msg
+maybeViewItem : Model -> Item -> Svg Msg
 maybeViewItem model item =
     if characterFoundItem model item then
         svg [] []
     else
         viewItem item
 
-viewItem : ItemProp -> Svg Msg
-viewItem item =
-    case item.imgType of
-        SVG -> showItemImage item.image item.attr.pos item.attr.size
-        IMG -> showItemImage item.image item.attr.pos item.attr.size
 
 viewGameText : Int -> Int -> String -> Svg Msg
 viewGameText posX posY str =

@@ -1,7 +1,7 @@
 module Main exposing (..)
 
 import Html exposing (..)
-import Html.Attributes exposing (class)
+import Html.Attributes exposing (class, href, method)
 import Html.Events exposing (onClick)
 
 import Json.Decode exposing (Decoder, int, string, list, nullable, field)
@@ -12,7 +12,7 @@ import Http
 -- MAIN
 
 main : Program Never Model Msg
-main = 
+main =
     Html.program
     { init = init
     , view = view
@@ -39,16 +39,16 @@ gameListDecoder =
 
 -- MODEL
 
-type alias JsonModel = 
+type alias JsonModel =
     { data: List Game }
 
-type alias Model = 
-    { gamesList : List Game 
+type alias Model =
+    { gamesList : List Game
     , displayGamesList : Bool
     , error: String
     }
 
-type alias Game = 
+type alias Game =
     { gameTitle: String
     , gameDescription: String
     }
@@ -56,10 +56,11 @@ type alias Game =
 emptyList = {}
 
 gamesUrl = "/api/games"
+logoutUrl = "/sessions/delete"
 
 
 getGamesList : Cmd Msg
-getGamesList = 
+getGamesList =
     Http.send UpdateGamesList
     (Http.get gamesUrl gameListDecoder)
 
@@ -92,8 +93,8 @@ update msg model =
             ( model, getGamesList )
 
         UpdateGamesList result ->
-            case result of 
-                Ok gl -> 
+            case result of
+                Ok gl ->
                     ({ model | gamesList = gl.data }, Cmd.none )
 
                 Err error ->
@@ -112,15 +113,18 @@ subscriptions model =
 
 view : Model -> Html Msg
 view model = 
-    div []
-    [ button [ class "btn btn-success", onClick DisplayGamesList ] [ text "Display Games List" ]
-    , button [ class "btn btn-danger", onClick HideGamesList  ] [ text "Hide Games List" ]
-    , if model.displayGamesList then
-        gamesIndex model
-      else
-        div [] []
-    , div [] [ 
-        text model.error
+    div [] [
+        a [ href logoutUrl , method "POST"] [text "logout"],
+        div []
+        [ button [ class "btn btn-success", onClick DisplayGamesList ] [ text "Display Games List" ]
+        , button [ class "btn btn-danger", onClick HideGamesList  ] [ text "Hide Games List" ]
+        , if model.displayGamesList then
+            gamesIndex model
+          else
+            div [] []
+        , div [] [ 
+            text model.error
+            ]
         ]
     ]
 
